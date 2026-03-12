@@ -1,0 +1,252 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { CheckCircle2, Circle, Calendar, Filter, User, ChevronDown, ListTodo, PieChart } from 'lucide-react';
+
+// Initial Data Extracted from Document
+const INITIAL_STAFF_DATA = [
+  { id: '1', name: '邱素芳', role: '综合管理', tasks: ['A5（科室工作计划与总结）', 'A2（院外文件）', 'A3（院内文件）'] },
+  { id: '2', name: '余俏娟', role: '内审员', tasks: ['每年多学科联合演练计划', '科室PDCA计划', '科室间交叉质控', 'A1（科室简介及架构等）', 'A6（检查及整改）', '每年培训计划', '产科质量检查资料管理', 'A4（门诊制度流程）', 'A10（应急预案-门诊）', 'A7手术授权及考核资料', '医疗技术台帐管理', '门诊病例质控'] },
+  { id: '3', name: '余俏娟', role: '教秘', tasks: ['A11（科教）', 'B21（新入职培训、转岗培训）', '安排培训时间及检查', '科室模型管理', '人员论文科研资料管理'] },
+  { id: '4', name: '梁金燕', role: '质控/医保', tasks: ['B9（危重症评审-每季度）', 'PPT质控', 'B14（病历质控）', '科室医保管理'] },
+  { id: '5', name: '文姣平', role: '医疗质量', tasks: ['B1（医疗质量协助-每月15日前）', '不达标数据反馈', 'B3（重点疾病）', '质控其他科病例10份（每月10日前）'] },
+  { id: '6', name: '叶萍妃', role: '病房/急诊', tasks: ['A10（应急预案-病房）', '管理晨会记录及查房照片(A8)', 'B13（急诊统计表及质控表）', '急诊分诊检诊资料分析'] },
+  { id: '7', name: '何小丹', role: '院感/统计', tasks: ['院感资料', 'B5（单病种）', 'B7医疗技术统计表及总结', '剖宫产质量分析'] },
+  { id: '8', name: '刘艳琴', role: '临床/产房', tasks: ['B4（临床路径）', 'B11（疑难危重抢救）', 'B16（输血用药）', '交班本管理', '产房质量分析PPT'] },
+  { id: '9', name: '王金玉', role: '随访/转介', tasks: ['B15（每月统计出院随访）', '高血压病人管理', 'B2（非计划再手术等）', 'B10（会诊、转介）'] },
+  { id: '10', name: '余建梅', role: '分析/排班', tasks: ['B10（接转诊登记）', 'B1中转剖、产后出血等分析', 'A7（外出学习培训登记）', '急诊剖宫产/DDI统计表', '病房及急诊、120排班'] },
+  { id: '11', name: '李敏', role: '纠纷/专科', tasks: ['纠纷分析', '糖尿病病人管理及随访', 'B14（病历质控及申诉）'] },
+  { id: '12', name: '肖遥', role: '指南/培训', tasks: ['A4指南、制度流程更新与培训', 'A9危重孕产妇抢救课程教案', '完善培训资料', '教学拍照资料协助'] },
+  { id: '13', name: '潘丽红', role: '下乡/门诊', tasks: ['下乡资料管理', '早孕门诊资料管理', '汇总全科下乡及门诊数据'] },
+  { id: '14', name: '韩子旭', role: '文员', tasks: ['B8（完善个人档案）', '收集继续教育证书', 'B19（各项培训）', 'A8（会议记录）', '每月15日前协助资料排版打印分类'] }
+];
+
+const MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+
+export default function App() {
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [filterUncompleted, setFilterUncompleted] = useState(false);
+  
+  // State shape: { monthIndex: { staffId: { taskIndex: boolean } } }
+  const [taskStatus, setTaskStatus] = useState(() => {
+    const initialState = {};
+    MONTHS.forEach((_, mIdx) => {
+      initialState[mIdx] = {};
+      INITIAL_STAFF_DATA.forEach(staff => {
+        initialState[mIdx][staff.id] = {};
+        staff.tasks.forEach((_, tIdx) => {
+          initialState[mIdx][staff.id][tIdx] = false;
+        });
+      });
+    });
+    return initialState;
+  });
+
+  const toggleTask = (staffId, taskIndex) => {
+    setTaskStatus(prev => ({
+      ...prev,
+      [currentMonth]: {
+        ...prev[currentMonth],
+        [staffId]: {
+          ...prev[currentMonth][staffId],
+          [taskIndex]: !prev[currentMonth][staffId][taskIndex]
+        }
+      }
+    }));
+  };
+
+  const currentMonthData = useMemo(() => {
+    let completedCount = 0;
+    let totalCount = 0;
+
+    const processedData = INITIAL_STAFF_DATA.map(staff => {
+      const staffTasks = staff.tasks.map((taskDesc, tIdx) => {
+        const isCompleted = taskStatus[currentMonth]?.[staff.id]?.[tIdx] || false;
+        totalCount++;
+        if (isCompleted) completedCount++;
+        return { desc: taskDesc, completed: isCompleted, index: tIdx };
+      });
+
+      const uncompletedTasks = staffTasks.filter(t => !t.completed);
+      const isStaffCompleted = uncompletedTasks.length === 0;
+
+      return {
+        ...staff,
+        displayTasks: filterUncompleted ? uncompletedTasks : staffTasks,
+        isCompleted: isStaffCompleted,
+        progress: Math.round(((staff.tasks.length - uncompletedTasks.length) / staff.tasks.length) * 100)
+      };
+    }).filter(staff => {
+      if (filterUncompleted) return !staff.isCompleted;
+      return true;
+    });
+
+    return {
+      staffList: processedData,
+      globalProgress: totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100)
+    };
+  }, [currentMonth, filterUncompleted, taskStatus]);
+
+  return (
+    <div className="min-h-screen bg-[#F5F5F7] font-sans text-[#1D1D1F] selection:bg-[#0071E3] selection:text-white pb-20">
+      
+      {/* Apple-style Navigation Bar */}
+      <nav className="sticky top-0 z-50 bg-[#F5F5F7]/80 backdrop-blur-md border-b border-[#E5E5EA] px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-[#1D1D1F] rounded-lg flex items-center justify-center">
+              <ListTodo className="text-white w-5 h-5" />
+            </div>
+            <span className="text-xl font-semibold tracking-tight">TaskFlow 2026</span>
+          </div>
+          <div className="text-sm font-medium text-[#86868B]">
+            科室资料任务监控中心
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto px-6 pt-12">
+        
+        {/* Header Section */}
+        <header className="mb-12 text-center flex flex-col items-center">
+          <h1 className="text-5xl font-bold tracking-tight mb-4 text-[#1D1D1F]">
+            资料归档，清晰可见。
+          </h1>
+          <p className="text-xl text-[#86868B] max-w-2xl">
+            实时追踪每月科室资料收集与质控任务，确保各项指标达标。绩效考核数据来源。
+          </p>
+        </header>
+
+        {/* Control Panel */}
+        <div className="bg-white rounded-[24px] shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-4 md:p-6 mb-10 flex flex-col md:flex-row items-center justify-between gap-6 transition-all">
+          
+          <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
+            <div className="flex items-center text-[#86868B] mr-2 shrink-0">
+              <Calendar className="w-5 h-5 mr-2" />
+              <span className="font-medium text-sm">选择月份</span>
+            </div>
+            <div className="flex gap-2">
+              {MONTHS.map((month, idx) => (
+                <button
+                  key={month}
+                  onClick={() => setCurrentMonth(idx)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all shrink-0 ${
+                    currentMonth === idx 
+                      ? 'bg-[#1D1D1F] text-white shadow-md' 
+                      : 'bg-[#F5F5F7] text-[#1D1D1F] hover:bg-[#E5E5EA]'
+                  }`}
+                >
+                  {month}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end shrink-0 border-t md:border-t-0 border-[#E5E5EA] pt-4 md:pt-0">
+            <div className="flex items-center gap-3">
+               <div className="w-10 h-10 rounded-full bg-[#F5F5F7] flex items-center justify-center relative">
+                  <PieChart className="w-5 h-5 text-[#0071E3]" />
+                  <svg className="absolute top-0 left-0 w-full h-full transform -rotate-90">
+                    <circle cx="20" cy="20" r="18" fill="none" stroke="#E5E5EA" strokeWidth="4" />
+                    <circle 
+                      cx="20" cy="20" r="18" fill="none" stroke="#0071E3" strokeWidth="4" 
+                      strokeDasharray="113" 
+                      strokeDashoffset={113 - (113 * currentMonthData.globalProgress) / 100}
+                      className="transition-all duration-500 ease-out"
+                    />
+                  </svg>
+               </div>
+               <div className="flex flex-col">
+                 <span className="text-xs text-[#86868B] uppercase tracking-wider font-semibold">当月总进度</span>
+                 <span className="text-lg font-bold">{currentMonthData.globalProgress}%</span>
+               </div>
+            </div>
+
+            <button
+              onClick={() => setFilterUncompleted(!filterUncompleted)}
+              className={`flex items-center px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
+                filterUncompleted 
+                  ? 'bg-[#0071E3] text-white shadow-[0_2px_10px_rgba(0,113,227,0.3)]' 
+                  : 'bg-[#F5F5F7] text-[#1D1D1F] hover:bg-[#E5E5EA]'
+              }`}
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              只看未完成
+            </button>
+          </div>
+        </div>
+
+        {/* Task Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {currentMonthData.staffList.length === 0 ? (
+            <div className="col-span-full py-20 text-center">
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                 <CheckCircle2 className="w-10 h-10 text-[#34C759]" />
+              </div>
+              <h3 className="text-2xl font-semibold mb-2">太棒了！</h3>
+              <p className="text-[#86868B]">当前视图下没有未完成的任务。</p>
+            </div>
+          ) : (
+            currentMonthData.staffList.map((staff) => (
+              <div 
+                key={`${staff.id}-${staff.role}`} 
+                className={`bg-white rounded-[24px] p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-[#F5F5F7] transition-all hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:-translate-y-1 flex flex-col h-full ${staff.isCompleted && !filterUncompleted ? 'opacity-60' : ''}`}
+              >
+                <div className="flex items-start justify-between mb-4 pb-4 border-b border-[#F5F5F7]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#F5F5F7] flex items-center justify-center text-[#1D1D1F] font-semibold text-lg">
+                      {staff.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[17px] leading-tight text-[#1D1D1F]">{staff.name}</h3>
+                      <span className="text-[13px] text-[#86868B] font-medium">{staff.role}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-sm font-bold ${staff.progress === 100 ? 'text-[#34C759]' : 'text-[#0071E3]'}`}>
+                      {staff.progress}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3">
+                  {staff.displayTasks.map((task) => (
+                    <div 
+                      key={task.index}
+                      onClick={() => toggleTask(staff.id, task.index)}
+                      className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                        task.completed 
+                          ? 'bg-[#F5F5F7] hover:bg-[#E5E5EA]' 
+                          : 'bg-white border border-[#E5E5EA] hover:border-[#0071E3] hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {task.completed ? (
+                          <CheckCircle2 className="w-5 h-5 text-[#34C759]" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-[#C7C7CC]" />
+                        )}
+                      </div>
+                      <span className={`text-[14px] leading-snug pt-0.5 ${
+                        task.completed ? 'text-[#86868B] line-through' : 'text-[#1D1D1F] font-medium'
+                      }`}>
+                        {task.desc}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </main>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E5EA; border-radius: 4px; }
+        .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #C7C7CC; }
+      `}} />
+    </div>
+  );
+}
