@@ -1,0 +1,7 @@
+services:
+  taskflow-board:
+    build: .
+    container_name: taskflow-board
+    restart: unless-stopped
+    ports:
+      - "8080:80"

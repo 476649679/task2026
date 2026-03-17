@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="./config.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body { font-family: 'Inter', -apple-system, sans-serif; background-color: #F5F5F7; }
@@ -20,11 +21,14 @@
     <div id="root"></div>
 
     <script type="module">
-        // --- 核心配置：请务必替换为您从 Firebase 控制台获取的真实信息 ---
+        // --- 核心配置：优先读取 config.js 中的配置，可按环境覆盖 ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-         const firebaseConfig = {
+
+        const runtimeConfig = window.__TASKFLOW_CONFIG__ ?? {};
+
+        const firebaseConfig = runtimeConfig.firebaseConfig ?? {
             apiKey: "AIzaSyCpJRO-ReMTkHpz3qd8gCAXZIRnajzvjRg",
             authDomain: "task-f01f9.firebaseapp.com",
             databaseURL: "https://task-f01f9-default-rtdb.firebaseio.com",
@@ -35,12 +39,17 @@
             measurementId: "G-DD8CM1JTB7"
         };
 
+        const urlWorkspace = new URLSearchParams(window.location.search).get('workspace');
+        const workspace = urlWorkspace || runtimeConfig.workspace || 'default';
+
         const app = initializeApp(firebaseConfig);
         window.db = getFirestore(app);
         window.doc = doc;
         window.onSnapshot = onSnapshot;
         window.setDoc = setDoc;
-        window.appId = "taskflow-2026-v1";
+        window.updateDoc = updateDoc;
+        window.appId = runtimeConfig.appId || "taskflow-2026-v1";
+        window.workspace = workspace;
     </script>
 
     <script type="text/babel">
@@ -58,7 +67,7 @@
         // 根据文档提取的任务分配数据 [cite: 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 21]
         const STAFF_DATA = [
             { id: '1', name: '邱素芳', role: '综合管理', tasks: ['A5（科室工作计划与总结）', 'A2（院外文件）', 'A3（院内文件）'] },
-            { id: '2', name: '余俏娟', role: '内审/质控', tasks: ['演练/PDCA计划', '科室间交叉质控', '培训计划', '产科质检', 'A1科室简介、组织架构', 'A6检查及整改', '门诊病历质控'] },
+            { id: '2', name: '余俏娟', role: '内审/质控', tasks: ['演练/PDCA计划', '科室间交叉质控', '培训计划', '产科质控', 'A1科室简介、组织架构', 'A6检查及整改', '门诊病历质控'] },
             { id: '3', name: '余俏娟', role: '教秘', tasks: ['A11科教', 'B21新入职培训', '安排培训时间', '模型/论文科研管理'] },
             { id: '4', name: '梁金燕', role: '质控医保', tasks: ['B9危重症评审', '选病历、PPT质控', 'B14病历质控', '医保管理'] },
             { id: '5', name: '文姣平', role: '医疗质量', tasks: ['B1医疗质量', 'B3重点疾病', '他科10份病例质控'] },
@@ -82,7 +91,7 @@
             const [sync, setSync] = useState(false);
 
             useEffect(() => {
-                const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'main_data');
+                const docRef = window.doc(window.db, 'artifacts', window.appId, 'workspaces', window.workspace, 'boards', 'main_data');
                 return window.onSnapshot(docRef, (snap) => {
                     if (snap.exists()) { setData(snap.data()); setSync(true); }
                     else {
@@ -100,18 +109,24 @@
             }, []);
 
             const toggle = async (sid, ti) => {
-                const newVal = !data[month][sid][ti];
-                const update = { ...data, [month]: { ...data[month], [sid]: { ...data[month][sid], [ti]: newVal } } };
+                const monthData = data?.[month] ?? {};
+                const staffData = monthData[sid] ?? {};
+                const newVal = !Boolean(staffData[ti]);
+                const update = { ...data, [month]: { ...monthData, [sid]: { ...staffData, [ti]: newVal } } };
                 setData(update);
                 setSync(false);
-                await window.setDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'main_data'), update);
+                await window.updateDoc(
+                    window.doc(window.db, 'artifacts', window.appId, 'workspaces', window.workspace, 'boards', 'main_data'),
+                    { [`${month}.${sid}.${ti}`]: newVal }
+                );
                 setSync(true);
             };
 
             const processed = useMemo(() => {
                 if (!data) return [];
+                const monthData = data[month] ?? {};
                 return STAFF_DATA.map(s => {
-                    const tasks = s.tasks.map((d, i) => ({ d, c: data[month][s.id][i], i }));
+                    const tasks = s.tasks.map((d, i) => ({ d, c: Boolean(monthData[s.id]?.[i]), i }));
                     const todo = tasks.filter(t => !t.c);
                     return { ...s, tasks: showTodo ? todo : tasks, done: todo.length === 0, p: Math.round(((s.tasks.length - todo.length) / s.tasks.length) * 100) };
                 }).filter(s => !showTodo || !s.done);
@@ -124,6 +139,7 @@
                     <nav className="flex items-center justify-between mb-12">
                         <div className="flex items-center gap-3">
                             <ListIcon /><span className="text-2xl font-bold">TaskFlow 2026</span>
+                            <span className="text-xs text-gray-400">协作空间：{window.workspace}</span>
                             <div className="ml-4 px-3 py-1 bg-white border rounded-full text-[11px] font-bold flex items-center gap-2 shadow-sm">
                                 <SyncIcon active={sync} />{sync ? '云端在线' : '同步中...'}
                             </div>
